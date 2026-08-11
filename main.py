@@ -121,3 +121,12 @@ async def update_room_title(room_id: str, req: RoomUpdateRequest):
         return {"room": res.data[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# 채팅방 삭제 API (Supabase CASCADE 설정으로 연관된 메시지도 자동 삭제됨)
+@app.delete("/api/rooms/{room_id}")
+async def delete_room(room_id: str):
+    try:
+        supabase.table("chat_rooms").delete().eq("id", room_id).execute()
+        return {"message": "삭제 완료"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
