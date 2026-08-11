@@ -21,7 +21,6 @@
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: var(--bg-main); color: var(--text-main); height: 100vh; display: flex; overflow: hidden; }
 
-        /* 사이드바 레이아웃 */
         .sidebar {
             width: 260px;
             background-color: var(--bg-sidebar);
@@ -61,7 +60,6 @@
         }
         .room-item:hover, .room-item.active { background-color: var(--bg-card); color: var(--text-main); }
 
-        /* 메인 채팅 영역 */
         .main-chat { flex: 1; display: flex; flex-direction: column; height: 100vh; }
         .chat-header {
             padding: 16px 20px;
@@ -91,9 +89,9 @@
 
         .input-container { padding: 16px 20px; background-color: var(--bg-sidebar); border-top: 1px solid var(--border); display: flex; gap: 10px; }
         .input-container input { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-main); color: white; outline: none; }
-        .input-container button { width: 44px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; }
+        .input-container button { width: 44px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .input-container button:disabled { background: var(--bg-card); cursor: not-allowed; }
 
-        /* 모바일 반응형 커스텀 */
         @media (max-width: 768px) {
             .sidebar { position: absolute; height: 100%; transform: translateX(-100%); }
             .sidebar.open { transform: translateX(0); }
@@ -105,29 +103,29 @@
 
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <button class="btn-new-chat" onclick="createNewRoom()"><i class="fa-solid fa-plus"></i> 새 대화 시작</button>
+            <button type="button" class="btn-new-chat" onclick="createNewRoom()"><i class="fa-solid fa-plus"></i> 새 대화 시작</button>
         </div>
         <div class="room-list" id="room-list"></div>
     </div>
 
     <div class="main-chat">
         <div class="chat-header">
-            <button class="toggle-sidebar" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
-            <h3 id="current-room-title">채팅방을 선택하세요</h3>
+            <button type="button" class="toggle-sidebar" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
+            <h3 id="current-room-title">대화방을 준비 중입니다...</h3>
         </div>
 
         <div class="chat-box" id="chat-box"></div>
 
         <div class="input-container">
-            <input type="text" id="user-input" placeholder="메시지를 입력하세요..." onkeydown="if(event.key==='Enter') sendMessage()">
-            <button onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+            <input type="text" id="user-input" placeholder="메시지를 입력하세요..." onkeydown="handleKeyDown(event)">
+            <button type="button" id="send-btn" onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
         </div>
     </div>
 
 <script>
-    const BACKEND_URL = "https://my-ai-chat-bot.onrender.com"; // 본인 Render 백엔드 주소 입력
+    // 💡 Render 백엔드 주소를 입력하세요 (끝에 / 없이 작성)
+    const BACKEND_URL = "https://my-ai-chat-bot.onrender.com"; 
     
-    // 유저 고유 ID 식별자 (모바일/PC 동기화를 원할 경우 이 아이디를 동일하게 세팅)
     let userId = localStorage.getItem("chat_user_id") || "user_" + Math.random().toString(36).substr(2, 9);
     localStorage.setItem("chat_user_id", userId);
 
@@ -141,52 +139,84 @@
         document.getElementById("sidebar").classList.toggle("open");
     }
 
+    // 엔터키 처리 함수 (Enter 키 전송 지원)
+    function handleKeyDown(event) {
+        if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault(); // 기본 줄바꿈 동작 방지
+            sendMessage();
+        }
+    }
+
     async function loadRooms() {
-        const res = await fetch(`${BACKEND_URL}/api/rooms/${userId}`);
-        const data = await res.json();
-        const roomList = document.getElementById("room-list");
-        roomList.innerHTML = "";
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/rooms/${userId}`);
+            const data = await res.json();
+            const roomList = document.getElementById("room-list");
+            roomList.innerHTML = "";
 
-        data.rooms.forEach(room => {
-            const div = document.createElement("div");
-            div.className = `room-item ${room.id === currentRoomId ? 'active' : ''}`;
-            div.innerText = room.title;
-            div.onclick = () => selectRoom(room.id, room.title);
-            roomList.appendChild(div);
-        });
+            if (data.rooms && data.rooms.length > 0) {
+                data.rooms.forEach(room => {
+                    const div = document.createElement("div");
+                    div.className = `room-item ${room.id === currentRoomId ? 'active' : ''}`;
+                    div.innerText = room.title;
+                    div.onclick = () => selectRoom(room.id, room.title);
+                    roomList.appendChild(div);
+                });
 
-        if (data.rooms.length > 0 && !currentRoomId) {
-            selectRoom(data.rooms[0].id, data.rooms[0].title);
+                if (!currentRoomId) {
+                    selectRoom(data.rooms[0].id, data.rooms[0].title);
+                }
+            } else {
+                await createNewRoom();
+            }
+        } catch (e) {
+            console.error("채팅방 목록 로드 실패:", e);
+            document.getElementById("current-room-title").innerText = "서버 연결 대기 중...";
         }
     }
 
     async function createNewRoom() {
-        const res = await fetch(`${BACKEND_URL}/api/rooms`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: userId })
-        });
-        const data = await res.json();
-        await loadRooms();
-        selectRoom(data.room.id, data.room.title);
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/rooms`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: userId })
+            });
+            const data = await res.json();
+            currentRoomId = data.room.id;
+            await loadRooms();
+            selectRoom(data.room.id, data.room.title);
+        } catch (e) {
+            console.error("새 방 생성 실패:", e);
+        }
     }
 
     async function selectRoom(roomId, title) {
         currentRoomId = roomId;
         document.getElementById("current-room-title").innerText = title;
         await loadMessages(roomId);
-        loadRooms(); // 활성화 클래스(active) 갱신
+        
+        // 활성화된 방 스타일 적용
+        const items = document.querySelectorAll('.room-item');
+        items.forEach(item => item.classList.remove('active'));
+        await loadRooms();
     }
 
     async function loadMessages(roomId) {
-        const res = await fetch(`${BACKEND_URL}/api/messages/${roomId}`);
-        const data = await res.json();
-        const chatBox = document.getElementById("chat-box");
-        chatBox.innerHTML = "";
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/messages/${roomId}`);
+            const data = await res.json();
+            const chatBox = document.getElementById("chat-box");
+            chatBox.innerHTML = "";
 
-        data.messages.forEach(msg => {
-            appendMessage(msg.content, msg.sender);
-        });
+            if (data.messages) {
+                data.messages.forEach(msg => {
+                    appendMessage(msg.content, msg.sender);
+                });
+            }
+        } catch (e) {
+            console.error("메시지 로드 실패:", e);
+        }
     }
 
     function appendMessage(text, side) {
@@ -206,11 +236,17 @@
 
     async function sendMessage() {
         const input = document.getElementById("user-input");
+        const sendBtn = document.getElementById("send-btn");
         const message = input.value.trim();
+
         if (!message || !currentRoomId) return;
 
-        appendMessage(message, "user");
+        // 전송 중 중복 입력 방지
         input.value = "";
+        input.disabled = true;
+        sendBtn.disabled = true;
+
+        appendMessage(message, "user");
         const loading = appendMessage("답변을 생각 중이에요... 💭", "bot");
 
         try {
@@ -220,14 +256,20 @@
                 body: JSON.stringify({ room_id: currentRoomId, message: message })
             });
             const data = await res.json();
+            
             if (res.ok) {
                 loading.innerText = data.answer;
-                loadRooms(); // 생성된 제목 갱신
+                loadRooms(); // 질문 입력에 따른 채팅방 제목 자동 갱신
             } else {
-                loading.innerText = "❌ 오류가 발생했습니다.";
+                loading.innerText = "❌ 오류가 발생했습니다: " + (data.detail || "알 수 없는 오류");
             }
         } catch (e) {
-            loading.innerText = "❌ 연결할 수 없습니다.";
+            loading.innerText = "❌ 서버와 연결할 수 없습니다. (Render 서버가 준비 중일 수 있으니 잠시 후 다시 시도해 주세요)";
+        } finally {
+            // 입력창 상태 원복
+            input.disabled = false;
+            sendBtn.disabled = false;
+            input.focus();
         }
     }
 </script>
