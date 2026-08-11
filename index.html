@@ -97,6 +97,37 @@
             .sidebar.open { transform: translateX(0); }
             .toggle-sidebar { display: block; }
         }
+        .room-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        .room-title-text {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+        .room-actions {
+            display: none;
+            gap: 8px;
+        }
+        .room-item:hover .room-actions {
+            display: flex;
+        }
+        .room-actions i {
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .room-actions i:hover {
+            color: var(--text-main);
+        }
     </style>
 </head>
 <body>
@@ -147,22 +178,35 @@
         }
     }
 
+    // 채팅방 목록 로드 시 수정/삭제 아이콘 함께 생성
     async function loadRooms() {
         try {
             const res = await fetch(`${BACKEND_URL}/api/rooms/${userId}`);
             const data = await res.json();
             const roomList = document.getElementById("room-list");
             roomList.innerHTML = "";
-
+    
             if (data.rooms && data.rooms.length > 0) {
                 data.rooms.forEach(room => {
                     const div = document.createElement("div");
                     div.className = `room-item ${room.id === currentRoomId ? 'active' : ''}`;
-                    div.innerText = room.title;
-                    div.onclick = () => selectRoom(room.id, room.title);
+                    
+                    div.innerHTML = `
+                        <span class="room-title-text">${room.title}</span>
+                        <div class="room-actions">
+                            <i class="fa-solid fa-pen" onclick="renameRoom(event, '${room.id}', '${room.title}')" title="이름 변경"></i>
+                        </div>
+                    `;
+                    
+                    div.onclick = (e) => {
+                        // 아이콘 클릭 시에는 채팅방 이동 동작을 방지
+                        if (!e.target.classList.contains('fa-pen')) {
+                            selectRoom(room.id, room.title);
+                        }
+                    };
                     roomList.appendChild(div);
                 });
-
+    
                 if (!currentRoomId) {
                     selectRoom(data.rooms[0].id, data.rooms[0].title);
                 }
@@ -171,7 +215,33 @@
             }
         } catch (e) {
             console.error("채팅방 목록 로드 실패:", e);
-            document.getElementById("current-room-title").innerText = "서버 연결 대기 중...";
+        }
+    }
+    
+    // 이름 변경 프롬프트 및 API 호출 함수
+    async function renameRoom(event, roomId, currentTitle) {
+        event.stopPropagation(); // 부모 div 클릭 이벤트 방지
+        const newTitle = prompt("새 대화방 이름을 입력하세요:", currentTitle);
+        
+        if (!newTitle || newTitle.trim() === "" || newTitle === currentTitle) return;
+    
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/rooms/${roomId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: newTitle.trim() })
+            });
+    
+            if (res.ok) {
+                if (roomId === currentRoomId) {
+                    document.getElementById("current-room-title").innerText = newTitle.trim();
+                }
+                await loadRooms();
+            } else {
+                alert("이름 변경에 실패했습니다.");
+            }
+        } catch (e) {
+            alert("서버 통신 오류가 발생했습니다.");
         }
     }
 
