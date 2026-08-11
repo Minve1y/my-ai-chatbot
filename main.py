@@ -104,3 +104,20 @@ async def chat_endpoint(req: ChatRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# 요청 모델 추가
+class RoomUpdateRequest(BaseModel):
+    title: str
+
+# 채팅방 이름 변경 API 추가
+@app.patch("/api/rooms/{room_id}")
+async def update_room_title(room_id: str, req: RoomUpdateRequest):
+    try:
+        new_title = req.title.strip()
+        if not new_title:
+            raise HTTPException(status_code=400, detail="제목을 입력해주세요.")
+        
+        res = supabase.table("chat_rooms").update({"title": new_title}).eq("id", room_id).execute()
+        return {"room": res.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
